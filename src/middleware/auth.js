@@ -1,12 +1,12 @@
 // src/middleware/auth.js
-const jwt = require("jsonwebtoken");
+const admin = require("../utils/firebaseAdmin");
 const User = require("../models/User");
 
-// normal user (student/admin) protected route
+// 🔒 Protected route for any logged-in user (student/admin)
 const protect = async (req, res, next) => {
   let token;
 
-  // Expect: Authorization: Bearer <token>
+  // Expect: Authorization: Bearer <firebase_id_token>
   if (
     req.headers.authorization &&
     req.headers.authorization.startsWith("Bearer ")
@@ -19,24 +19,46 @@ const protect = async (req, res, next) => {
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    // ✅ Firebase ID token verify
+    const decoded = await admin.auth().verifyIdToken(token);
+    // decoded e thakbe: uid, email, name, etc.
 
-    const user = await User.findById(decoded.userId).select("-password");
+    // Firebase theke asha user info
+    const firebaseUid = decoded.uid;
+    const email = decoded.email;
 
-    if (!user) {
-      return res.status(401).json({ message: "User not found" });
+    if (!email) {
+      return res.status(401).json({
+        message: "Token is valid but email is missing in Firebase token",
+      });
     }
 
-    req.user = user; // req.user e full user peye jabe
+    // 🚩 Option 1: User collection e email diye khujbo
+    let user = await User.findOne({ email });
+
+    // Jodi DB te user na thake, tahole notun user auto-create (optional)
+    if (!user) {
+      user = await User.create({
+        name: decoded.name || "Unnamed User",
+        email,
+        role: "student", // default role
+        firebaseUid,     // jodi model e field thake, nice add korte paro
+      });
+    }
+
+    // Request e user object set kore dilam
+    req.user = user; // ei user._id, user.role sob pabe
 
     next();
   } catch (error) {
-    console.error("JWT error:", error.message);
-    return res.status(401).json({ message: "Not authorized, invalid token" });
+    console.error("Firebase auth error:", error.message);
+    return res
+      .status(401)
+      .json({ message: "Not authorized, invalid Firebase token" });
   }
 };
 
-// only admin access
+// 🔑 Only admin access middleware
 const requireAdmin = (req, res, next) => {
   if (req.user && req.user.role === "admin") {
     return next();

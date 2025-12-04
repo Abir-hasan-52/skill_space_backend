@@ -2,42 +2,48 @@
 const express = require("express");
 const bcrypt = require("bcryptjs");
 const User = require("../models/User");
-const generateToken = require("../utils/generateToken");
 const { protect } = require("../middleware/auth");
 
 const router = express.Router();
 
 /**
  * @route   POST /api/auth/register
- * @desc    Student registration
+ * @desc    Student registration (password ashbe backend e)
  * @access  Public
+ *
+ * Flow:
+ *  1) Firebase signup in frontend
+ *  2) Backend POST /register → hash password, store user
  */
 router.post("/register", async (req, res, next) => {
   try {
     const { name, email, password } = req.body;
 
     if (!name || !email || !password) {
-      return res.status(400).json({ message: "Name, email and password are required" });
+      return res.status(400).json({
+        message: "Name, email and password are required",
+      });
     }
 
     const existing = await User.findOne({ email });
     if (existing) {
-      return res.status(400).json({ message: "Email already in use" });
+      return res.status(400).json({
+        message: "Email already in use",
+      });
     }
 
-    const hashed = await bcrypt.hash(password, 10);
+    // Hash password (backend memory)
+    const hashedPassword = await bcrypt.hash(password, 10);
 
     const user = await User.create({
       name,
       email,
-      password: hashed,
+      password: hashedPassword,
       role: "student",
     });
 
-    const token = generateToken(user._id, user.role);
-
     res.status(201).json({
-      token,
+      message: "Registration successful",
       user: {
         _id: user._id,
         name: user.name,
@@ -53,7 +59,7 @@ router.post("/register", async (req, res, next) => {
 /**
  * @route   POST /api/auth/admin-register
  * @desc    Admin registration with secret key
- * @access  Public (but protected by secret key)
+ * @access  Public
  */
 router.post("/admin-register", async (req, res, next) => {
   try {
@@ -63,29 +69,28 @@ router.post("/admin-register", async (req, res, next) => {
       return res.status(400).json({ message: "All fields are required" });
     }
 
-    // SECRET KEY CHECK
     if (adminSecretKey !== process.env.ADMIN_SECRET_KEY) {
       return res.status(403).json({ message: "Invalid admin secret key" });
     }
 
     const existing = await User.findOne({ email });
     if (existing) {
-      return res.status(400).json({ message: "Email already in use" });
+      return res.status(400).json({
+        message: "Email already in use",
+      });
     }
 
-    const hashed = await bcrypt.hash(password, 10);
+    const hashedPassword = await bcrypt.hash(password, 10);
 
     const user = await User.create({
       name,
       email,
-      password: hashed,
+      password: hashedPassword,
       role: "admin",
     });
 
-    const token = generateToken(user._id, user.role);
-
     res.status(201).json({
-      token,
+      message: "Admin registered successfully",
       user: {
         _id: user._id,
         name: user.name,
@@ -100,43 +105,37 @@ router.post("/admin-register", async (req, res, next) => {
 
 /**
  * @route   POST /api/auth/login
- * @desc    Login for student / admin
+ * @desc    Sync user after Firebase login
  * @access  Public
+ *
+ * Backend password check is OPTIONAL now
+ * because Firebase already verified password.
  */
 router.post("/login", async (req, res, next) => {
   try {
-    const { email, password } = req.body;
+    const { email } = req.body;
 
-    if (!email || !password) {
-      return res.status(400).json({ message: "Email and password are required" });
+    if (!email) {
+      return res.status(400).json({
+        message: "Email is required",
+      });
     }
 
     const user = await User.findOne({ email });
 
     if (!user) {
-      return res.status(400).json({ message: "Invalid credentials" });
+      return res.status(404).json({
+        message: "User does not exist in backend, please register",
+      });
     }
-
-    const isMatch = await bcrypt.compare(password, user.password);
-
-    if (!isMatch) {
-      return res.status(400).json({ message: "Invalid credentials" });
-    }
-
-    // optional: last login time update
-    user.lastLoginAt = new Date();
-    await user.save();
-
-    const token = generateToken(user._id, user.role);
 
     res.json({
-      token,
+      message: "Login sync successful",
       user: {
         _id: user._id,
         name: user.name,
         email: user.email,
         role: user.role,
-        
       },
     });
   } catch (err) {
@@ -146,12 +145,17 @@ router.post("/login", async (req, res, next) => {
 
 /**
  * @route   GET /api/auth/me
- * @desc    Get current logged in user
+ * @desc    Get logged-in user (Firebase token required)
  * @access  Private
  */
 router.get("/me", protect, async (req, res) => {
   res.json({
-    user: req.user,
+    user: {
+      _id: req.user._id,
+      name: req.user.name,
+      email: req.user.email,
+      role: req.user.role,
+    },
   });
 });
 
