@@ -3,6 +3,7 @@ const express = require("express");
 const bcrypt = require("bcryptjs");
 const User = require("../models/User");
 const { protect } = require("../middleware/auth");
+const sendEmail = require("../utils/sendEmail");
 
 const router = express.Router();
 
@@ -10,21 +11,19 @@ const router = express.Router();
  * @route   POST /api/auth/register
  * @desc    Student registration (password ashbe backend e)
  * @access  Public
- *
- * Flow:
- *  1) Firebase signup in frontend
- *  2) Backend POST /register → hash password, store user
  */
 router.post("/register", async (req, res, next) => {
   try {
     const { name, email, password } = req.body;
 
+    // 1) Basic validation
     if (!name || !email || !password) {
       return res.status(400).json({
         message: "Name, email and password are required",
       });
     }
 
+    // 2) Existing user check
     const existing = await User.findOne({ email });
     if (existing) {
       return res.status(400).json({
@@ -32,9 +31,10 @@ router.post("/register", async (req, res, next) => {
       });
     }
 
-    // Hash password (backend memory)
+    // 3) Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
+    // 4) Create user
     const user = await User.create({
       name,
       email,
@@ -42,6 +42,43 @@ router.post("/register", async (req, res, next) => {
       role: "student",
     });
 
+    // 5) Send welcome email (non-blocking or await – duitar ekta)
+    const dashboardUrl =
+      process.env.FRONTEND_DASHBOARD_URL || "http://localhost:5173/dashboard";
+
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+        <body style="font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">
+          <h2>Welcome to SkillSpace, ${name}!</h2>
+          <p>Your account has been successfully created.</p>
+          <p>We’re excited to have you on board. Start learning and grow your skills.</p>
+          <p>
+            <a href="${dashboardUrl}" style="
+              display:inline-block;
+              padding:8px 16px;
+              background:#2563eb;
+              color:#ffffff;
+              border-radius:999px;
+              text-decoration:none;
+              font-size:14px;
+            ">
+              Go to your dashboard
+            </a>
+          </p>
+          <p style="font-size:12px;color:#6b7280;">
+            If the button doesn't work, copy and paste this URL in your browser:<br/>
+            <span style="color:#2563eb;">${dashboardUrl}</span>
+          </p>
+          <p>Best regards,<br/>SkillSpace Team</p>
+        </body>
+      </html>
+    `;
+
+    // ei line await সহ রাখলে mail error hole catch e dhora porbe:
+    sendEmail(email, "Welcome to SkillSpace 🎉", htmlContent);
+
+    // 6) Response
     res.status(201).json({
       message: "Registration successful",
       user: {
@@ -52,6 +89,7 @@ router.post("/register", async (req, res, next) => {
       },
     });
   } catch (err) {
+    console.error("Register error:", err);
     next(err);
   }
 });
@@ -89,6 +127,8 @@ router.post("/admin-register", async (req, res, next) => {
       role: "admin",
     });
 
+    // optional: admin keo mail dite chao hole ekhane sendEmail call korte paro
+
     res.status(201).json({
       message: "Admin registered successfully",
       user: {
@@ -107,9 +147,6 @@ router.post("/admin-register", async (req, res, next) => {
  * @route   POST /api/auth/login
  * @desc    Sync user after Firebase login
  * @access  Public
- *
- * Backend password check is OPTIONAL now
- * because Firebase already verified password.
  */
 router.post("/login", async (req, res, next) => {
   try {
