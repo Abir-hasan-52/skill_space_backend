@@ -1,33 +1,29 @@
 // src/routes/adminCourse.routes.js
 const express = require("express");
 const Course = require("../models/Course");
-const User = require("../models/User"); // get-by-email er jonno
+const User = require("../models/User");
 const { protect, requireAdmin } = require("../middleware/auth");
 
 const router = express.Router();
 
 /**
  * @route   POST /api/admin/courses
- * @desc    Create a new course (with batch, modules, quiz, assignment)
+ * @desc    Create a new course
  * @access  Admin
  */
-// protect, requireAdmin, 
-router.post("/", protect,requireAdmin,  async (req, res, next) => {
+router.post("/", protect, requireAdmin, async (req, res, next) => {
   try {
     const payload = req.body;
 
-    // Free course hole price 0 kore dao
     if (payload.isFree) {
       payload.price = 0;
       payload.discountPrice = 0;
     }
 
-    // kon admin create korse
     if (req.user?._id) {
       payload.createdBy = req.user._id;
     }
 
-    // modules.quiz er correctIndex ensure number
     if (Array.isArray(payload.modules)) {
       payload.modules = payload.modules.map((mod) => {
         const updatedModule = { ...mod };
@@ -61,7 +57,7 @@ router.post("/", protect,requireAdmin,  async (req, res, next) => {
 
 /**
  * @route   GET /api/admin/courses
- * @desc    Get all courses (admin view) - draft + published
+ * @desc    Get all courses (admin view)
  * @access  Admin
  */
 router.get("/", protect, requireAdmin, async (req, res, next) => {
@@ -95,10 +91,6 @@ router.get("/my", protect, requireAdmin, async (req, res, next) => {
  * @route   GET /api/admin/courses/by-email/:email
  * @desc    Get courses created by admin email
  * @access  Admin
- *
- * NOTE:
- *  - Prothome User collection theke email diye admin khuje,
- *    pore tar _id diye course filter kortechi
  */
 router.get("/by-email/:email", protect, requireAdmin, async (req, res, next) => {
   try {
@@ -122,7 +114,7 @@ router.get("/by-email/:email", protect, requireAdmin, async (req, res, next) => 
 
 /**
  * @route   GET /api/admin/courses/:id
- * @desc    Get single course by id (admin) - can see draft/published
+ * @desc    Get single course by id (admin)
  * @access  Admin
  */
 router.get("/:id", protect, requireAdmin, async (req, res, next) => {
@@ -142,7 +134,7 @@ router.get("/:id", protect, requireAdmin, async (req, res, next) => {
 
 /**
  * @route   PUT /api/admin/courses/:id
- * @desc    Update a course
+ * @desc    Update full course
  * @access  Admin
  */
 router.put("/:id", protect, requireAdmin, async (req, res, next) => {
@@ -154,7 +146,6 @@ router.put("/:id", protect, requireAdmin, async (req, res, next) => {
       payload.discountPrice = 0;
     }
 
-    // correctIndex number kore nicchi
     if (Array.isArray(payload.modules)) {
       payload.modules = payload.modules.map((mod) => {
         const updatedModule = { ...mod };
@@ -194,6 +185,34 @@ router.put("/:id", protect, requireAdmin, async (req, res, next) => {
   } catch (err) {
     console.error("Update course error:", err);
     next(err);
+  }
+});
+
+/**
+ * @route   PATCH /api/admin/courses/:id
+ * @desc    Partial update (status etc)
+ * @access  Admin
+ */
+router.patch("/:id", protect, requireAdmin, async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const updateData = req.body; // e.g. { status: "published" }
+
+    const course = await Course.findByIdAndUpdate(id, updateData, {
+      new: true,
+    });
+
+    if (!course) {
+      return res.status(404).json({ message: "Course not found" });
+    }
+
+    res.json({
+      message: "Course updated successfully",
+      course,
+    });
+  } catch (error) {
+    console.error("Patch course error:", error);
+    next(error);
   }
 });
 
