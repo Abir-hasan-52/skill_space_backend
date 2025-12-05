@@ -9,6 +9,7 @@ const adminCourseRoutes = require("./routes/adminCourse.routes");
 const enrollmentRoutes = require("./routes/enrollment.routes");
 const courseRoutes = require("./routes/course.routes");
 const errorHandler = require("./middleware/errorHandler");
+const userRoutes = require("./routes/user.routes");
 
 dotenv.config();
 connectDB();
@@ -26,6 +27,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/admin/courses", adminCourseRoutes); 
 app.use("/api/courses", courseRoutes);
 app.use("/api/enrollments", enrollmentRoutes);
+app.use("/api/users", userRoutes);
 
 app.use(errorHandler);
 

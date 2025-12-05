@@ -12,7 +12,7 @@ const router = express.Router();
  * @access  Admin
  */
 // protect, requireAdmin, 
-router.post("/", protect, async (req, res, next) => {
+router.post("/", protect,requireAdmin,  async (req, res, next) => {
   try {
     const payload = req.body;
 
